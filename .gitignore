@@ -16,3 +16,4 @@ data/postgres/
 node_modules/
 frontend/dist/
 *.tsbuildinfo
+logs/

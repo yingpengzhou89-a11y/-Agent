@@ -26,6 +26,22 @@ PostgreSQL + pgvector ◀── 业务数据、向量检索、Agent 决策审计
 
 ## 本地启动
 
+### 推荐：一键开发模式（Windows）
+
+确保 Docker Desktop 已启动后，只需在项目根目录运行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-dev.ps1
+```
+
+脚本会启动 PostgreSQL、等待数据库就绪、执行迁移，并以热更新模式启动后端（18000）和前端（5173）。不需要手动激活 Conda 环境。日志写入被 Git 忽略的 `logs/`；停止全部本地服务可运行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\stop-dev.ps1
+```
+
+### 手动开发模式
+
 ```powershell
 conda create --name Agent python=3.13
 conda activate Agent
@@ -48,13 +64,13 @@ npm run dev
 
 打开 `http://127.0.0.1:5173`。Vite 默认会将 `/api` 请求代理到本地 `http://127.0.0.1:18000` 的 FastAPI，无需额外配置 CORS。只有后端改用其他地址时，才在启动前设置 `VITE_BACKEND_URL` 覆盖默认值。
 
-完整 Docker Compose 模式：
+完整 Docker Compose 模式（推荐演示或部署）：
 
 ```powershell
 docker compose up --build
 ```
 
-前端同样位于 `http://127.0.0.1:5173`，Nginx 会将 API 请求反向代理给后端。
+前端同样位于 `http://127.0.0.1:5173`，Nginx 会将 API 请求反向代理给后端。Compose 会等待 PostgreSQL 通过健康检查，后端容器启动时自动执行 `alembic upgrade head`。
 
 ## 数据库迁移
 
