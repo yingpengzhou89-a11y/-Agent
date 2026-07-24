@@ -1,0 +1,2 @@
+"""Interview Copilot backend package."""
+

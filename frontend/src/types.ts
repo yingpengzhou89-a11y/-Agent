@@ -1,0 +1,6 @@
+export type User = { id: string; display_name: string; email?: string }
+export type DocumentRecord = { id: string; name?: string; title?: string; raw_text?: string; is_current?: boolean; parse_status?: string; index_status?: string }
+export type Match = { id: string; report: { readiness_index: number; matching_rule_version: string; weight_config: Record<string, number>; score_breakdown: Record<string, number>; skill_coverage: Array<{ skill: string; requirement: 'must_have' | 'nice_to_have'; status: 'covered' | 'missing' | 'evidence_insufficient'; score: number; reason: string; evidence_refs: Array<{ source_name: string }> }>; missing_skills: string[]; evidence_gaps: string[]; priority_topics: string[]; recommended_order: string[] } }
+export type Plan = { id: string; plan: { question_blueprints: Array<{ text: string; type: string; difficulty: string; skill_tags: string[] }> } }
+export type Session = { id: string; status: string; current_question_index: number }
+export type Evaluation = { answer_id: string; overall_score: number; strengths: string[]; errors: Array<{ issue: string; deduction_reason: string }>; missing_points: string[]; improvement_advice: string[]; improved_answer: string; confidence: number }
