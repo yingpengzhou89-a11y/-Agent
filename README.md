@@ -62,7 +62,7 @@ npm install
 npm run dev
 ```
 
-打开 `http://127.0.0.1:5173`。Vite 默认会将 `/api` 请求代理到本地 `http://127.0.0.1:18000` 的 FastAPI，无需额外配置 CORS。只有后端改用其他地址时，才在启动前设置 `VITE_BACKEND_URL` 覆盖默认值。
+打开 `http://localhost:5173`。Vite 默认会将 `/api` 请求代理到本地 `http://127.0.0.1:18000` 的 FastAPI，无需额外配置 CORS。只有后端改用其他地址时，才在启动前设置 `VITE_BACKEND_URL` 覆盖默认值。
 
 完整 Docker Compose 模式（推荐演示或部署）：
 
@@ -70,7 +70,7 @@ npm run dev
 docker compose up --build
 ```
 
-前端同样位于 `http://127.0.0.1:5173`，Nginx 会将 API 请求反向代理给后端。Compose 会等待 PostgreSQL 通过健康检查，后端容器启动时自动执行 `alembic upgrade head`。
+前端同样位于 `http://localhost:5173`，Nginx 会将 API 请求反向代理给后端。Compose 会等待 PostgreSQL 通过健康检查，后端容器启动时自动执行 `alembic upgrade head`。
 
 ## 数据库迁移
 

@@ -58,10 +58,10 @@ if (-not $NoFrontend -and -not (Test-ListeningPort 5173)) {
 }
 
 Write-Host 'Interview Copilot Agent is running.' -ForegroundColor Green
-Write-Host 'Frontend: http://127.0.0.1:5173'
+Write-Host 'Frontend: http://localhost:5173'
 Write-Host 'Backend:  http://127.0.0.1:18000/docs'
 Write-Host "Logs: $logDir"
 
 if (-not $NoBrowser) {
-    Start-Process 'http://127.0.0.1:5173'
+    Start-Process 'http://localhost:5173'
 }
