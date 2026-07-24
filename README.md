@@ -43,11 +43,10 @@ uvicorn app.main:app --reload --port 18000
 ```powershell
 cd frontend
 npm install
-$env:VITE_BACKEND_URL = "http://127.0.0.1:18000"
 npm run dev
 ```
 
-打开 `http://127.0.0.1:5173`。Vite 会将 `/api` 请求代理到本地 FastAPI，无需额外配置 CORS。
+打开 `http://127.0.0.1:5173`。Vite 默认会将 `/api` 请求代理到本地 `http://127.0.0.1:18000` 的 FastAPI，无需额外配置 CORS。只有后端改用其他地址时，才在启动前设置 `VITE_BACKEND_URL` 覆盖默认值。
 
 完整 Docker Compose 模式：
 
