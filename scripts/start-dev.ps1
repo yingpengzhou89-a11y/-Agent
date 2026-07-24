@@ -20,20 +20,20 @@ function Test-ListeningPort([int]$Port) {
 try {
     docker compose up -d postgres | Out-Host
 } catch {
-    throw '无法启动 PostgreSQL。请先启动 Docker Desktop，再重新运行此脚本。'
+    throw 'Unable to start PostgreSQL. Start Docker Desktop and run this script again.'
 }
 
 for ($attempt = 1; $attempt -le 30; $attempt++) {
     docker compose exec -T postgres pg_isready -U interview -d interview_copilot *> $null
     if ($LASTEXITCODE -eq 0) { break }
     Start-Sleep -Seconds 1
-    if ($attempt -eq 30) { throw 'PostgreSQL 在 30 秒内未就绪。请运行 docker compose logs postgres 排查。' }
+    if ($attempt -eq 30) { throw 'PostgreSQL was not ready within 30 seconds. Run: docker compose logs postgres' }
 }
 
 $pythonExe = ((conda run --no-capture-output -n Agent python -c "import sys; print(sys.executable)") |
     Select-Object -Last 1).Trim()
 if (-not (Test-Path -LiteralPath $pythonExe)) {
-    throw '找不到 Conda 环境 Agent。请先创建它：conda create --name Agent python=3.13'
+    throw 'Conda environment Agent was not found. Create it with: conda create --name Agent python=3.13'
 }
 
 Push-Location (Join-Path $root 'backend')
@@ -57,10 +57,10 @@ if (-not $NoFrontend -and -not (Test-ListeningPort 5173)) {
     Set-Content -LiteralPath (Join-Path $logDir 'frontend.pid') -Value $frontend.Id
 }
 
-Write-Host 'Interview Copilot Agent 已启动。' -ForegroundColor Green
-Write-Host '前端：http://127.0.0.1:5173'
-Write-Host '后端：http://127.0.0.1:18000/docs'
-Write-Host "日志目录：$logDir"
+Write-Host 'Interview Copilot Agent is running.' -ForegroundColor Green
+Write-Host 'Frontend: http://127.0.0.1:5173'
+Write-Host 'Backend:  http://127.0.0.1:18000/docs'
+Write-Host "Logs: $logDir"
 
 if (-not $NoBrowser) {
     Start-Process 'http://127.0.0.1:5173'

@@ -9,7 +9,7 @@ foreach ($service in 'backend', 'frontend') {
         $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
         if ($process) {
             Stop-Process -Id $processId -Force
-            Write-Host "已停止 $service（PID $processId）。"
+            Write-Host "Stopped $service (PID $processId)."
         }
         Remove-Item -LiteralPath $pidFile -Force
     }
