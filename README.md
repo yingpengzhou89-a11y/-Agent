@@ -188,7 +188,9 @@ stateDiagram-v2
 上传项目 README、设计文档、Markdown、TXT 或 PDF 后，系统会解析并标题感知切分文档。调用 `POST /api/v1/knowledge/documents/{document_id}/reindex` 后会生成向量索引；检索使用 PostgreSQL FTS（`tsvector` + GIN）作为词法主召回，与向量结果做 RRF 融合；中文解析没有命中时会回退到轻量关键词召回。
 
 - `POST /api/v1/knowledge/documents`：`multipart/form-data` 上传文件，`source_type` 为 `project_docs` 或 `knowledge_base`；
-- `POST /api/v1/knowledge/search`：Hybrid Search，返回文档名、片段 ID、来源类型和融合分数；
+- `POST /api/v1/knowledge/search`：Hybrid Search，返回检索记录 ID、召回策略、文档名、片段 ID、来源类型和融合分数；
+- `POST /api/v1/knowledge/search/{search_id}/feedback`：对引用标记“有帮助”或“不相关”；
+- `GET /api/v1/knowledge/quality`：返回零结果率、平均检索延迟、反馈覆盖率和引用有帮助率；
 - `DELETE /api/v1/knowledge/documents/{document_id}`：删除原始文件与索引；
 - 所有文档、切片和检索均以 `user_id` 为第一层 ACL 过滤，不跨用户返回结果。
 
@@ -214,11 +216,11 @@ python -m ruff check app tests
 python -m pytest -q
 ```
 
-测试覆盖：Schema 与 Rubric 重算、固定回答评测集、岗位匹配的 70/20/10 规则与证据引用、用户 ACL 的知识检索、会话暂停/恢复和幂等回答、模型不可用时的计划/评价降级与会话继续推进。固定回答集的使用方式见 [docs/evaluation_benchmark.md](docs/evaluation_benchmark.md)。
+测试覆盖：Schema 与 Rubric 重算、固定回答评测集、岗位匹配的 70/20/10 规则与证据引用、用户 ACL 的知识检索、检索质量指标聚合、会话暂停/恢复和幂等回答、模型不可用时的计划/评价降级与会话继续推进。固定回答集的使用方式见 [docs/evaluation_benchmark.md](docs/evaluation_benchmark.md)。
 
 ## 数据库演进说明
 
-Alembic 迁移按业务能力演进，而不是以迁移数量作为卖点：`01` 用户/简历/JD，`02` 匹配报告，`03` 面试计划、会话、问题与回答，`04` 单题评价，`05` 报告与掌握度，`06` 知识库与 pgvector，`07` 统一时区时间戳，`08` Agent 决策审计，`09` 评分 Rubric、调用配置和确定性检查，`10` 动态复习间隔，`11` 知识片段 PostgreSQL FTS 索引。
+Alembic 迁移按业务能力演进，而不是以迁移数量作为卖点：`01` 用户/简历/JD，`02` 匹配报告，`03` 面试计划、会话、问题与回答，`04` 单题评价，`05` 报告与掌握度，`06` 知识库与 pgvector，`07` 统一时区时间戳，`08` Agent 决策审计，`09` 评分 Rubric、调用配置和确定性检查，`10` 动态复习间隔，`11` 知识片段 PostgreSQL FTS 索引，`12` 检索事件与引用反馈。
 
 所有迁移均提供 `upgrade` / `downgrade`。其中 `09` 为历史评价新增可空追溯字段，不会改写或删除既有评价数据；历史记录没有这些元数据时，接口会返回 `null`，新生成的评价才会完整写入。
 

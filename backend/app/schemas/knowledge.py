@@ -34,3 +34,23 @@ class KnowledgeSearchResult(BaseModel):
     source_type: str
     source_name: str
     score: float = Field(ge=0)
+
+
+class KnowledgeSearchResponse(BaseModel):
+    search_id: UUID
+    results: list[KnowledgeSearchResult]
+    retrieval_config: dict[str, str | bool]
+
+
+class KnowledgeCitationFeedbackCreate(BaseModel):
+    chunk_id: UUID
+    relevance: Literal["helpful", "not_helpful"]
+
+
+class KnowledgeRetrievalQualityRead(BaseModel):
+    search_count: int
+    zero_result_rate: float = Field(ge=0, le=1)
+    average_latency_ms: float = Field(ge=0)
+    feedback_count: int
+    feedback_coverage_rate: float = Field(ge=0, le=1)
+    helpful_rate: float | None = Field(default=None, ge=0, le=1)

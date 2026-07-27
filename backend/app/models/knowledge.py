@@ -2,7 +2,7 @@ from typing import Any
 from uuid import UUID
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import JSON, ForeignKey, String, Text, Uuid
+from sqlalchemy import JSON, ForeignKey, Integer, String, Text, Uuid, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.config import settings
@@ -30,3 +30,30 @@ class DocumentChunk(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     content: Mapped[str] = mapped_column(Text)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     embedding: Mapped[list[float] | None] = mapped_column(Vector(settings.embedding_dimensions), nullable=True)
+
+
+class KnowledgeSearchEvent(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "knowledge_search_events"
+
+    user_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    query: Mapped[str] = mapped_column(Text)
+    scope_json: Mapped[list[str]] = mapped_column(JSON, default=list)
+    top_k: Mapped[int] = mapped_column(Integer)
+    result_chunk_ids_json: Mapped[list[str]] = mapped_column(JSON, default=list)
+    retrieval_config_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    result_count: Mapped[int] = mapped_column(Integer)
+    latency_ms: Mapped[int] = mapped_column(Integer)
+
+
+class KnowledgeSearchFeedback(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "knowledge_search_feedback"
+    __table_args__ = (UniqueConstraint("search_event_id", "chunk_id", name="uq_search_feedback_event_chunk"),)
+
+    user_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    search_event_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("knowledge_search_events.id", ondelete="CASCADE"), index=True
+    )
+    chunk_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("document_chunks.id", ondelete="CASCADE"), index=True
+    )
+    relevance: Mapped[str] = mapped_column(String(20))

@@ -4,10 +4,70 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
-from app.models.knowledge import DocumentChunk, KnowledgeDocument
+from app.models.knowledge import (
+    DocumentChunk,
+    KnowledgeDocument,
+    KnowledgeSearchEvent,
+    KnowledgeSearchFeedback,
+)
 
 
 class KnowledgeRepository:
+    async def create_search_event(
+        self, session: AsyncSession, event: KnowledgeSearchEvent
+    ) -> KnowledgeSearchEvent:
+        session.add(event)
+        await session.flush()
+        await session.refresh(event)
+        return event
+
+    async def get_search_event(
+        self, session: AsyncSession, user_id: UUID, search_event_id: UUID
+    ) -> KnowledgeSearchEvent:
+        event = await session.scalar(
+            select(KnowledgeSearchEvent).where(
+                KnowledgeSearchEvent.id == search_event_id,
+                KnowledgeSearchEvent.user_id == user_id,
+            )
+        )
+        if event is None:
+            raise AppError("NOT_FOUND", "未找到该检索记录", status_code=404)
+        return event
+
+    async def upsert_feedback(
+        self, session: AsyncSession, feedback: KnowledgeSearchFeedback
+    ) -> KnowledgeSearchFeedback:
+        previous = await session.scalar(
+            select(KnowledgeSearchFeedback).where(
+                KnowledgeSearchFeedback.search_event_id == feedback.search_event_id,
+                KnowledgeSearchFeedback.chunk_id == feedback.chunk_id,
+            )
+        )
+        if previous is not None:
+            previous.relevance = feedback.relevance
+            await session.flush()
+            return previous
+        session.add(feedback)
+        await session.flush()
+        await session.refresh(feedback)
+        return feedback
+
+    async def list_search_events(
+        self, session: AsyncSession, user_id: UUID
+    ) -> list[KnowledgeSearchEvent]:
+        result = await session.scalars(
+            select(KnowledgeSearchEvent)
+            .where(KnowledgeSearchEvent.user_id == user_id)
+            .order_by(KnowledgeSearchEvent.created_at.desc())
+        )
+        return list(result)
+
+    async def list_feedback(self, session: AsyncSession, user_id: UUID) -> list[KnowledgeSearchFeedback]:
+        result = await session.scalars(
+            select(KnowledgeSearchFeedback).where(KnowledgeSearchFeedback.user_id == user_id)
+        )
+        return list(result)
+
     async def create_document(self, session: AsyncSession, document: KnowledgeDocument) -> KnowledgeDocument:
         session.add(document)
         await session.flush()

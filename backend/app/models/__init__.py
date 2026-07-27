@@ -3,7 +3,7 @@ from app.models.matches import MatchAnalysis
 from app.models.interviews import InterviewAnswer, InterviewPlan, InterviewQuestion, InterviewSession
 from app.models.evaluations import AnswerEvaluation
 from app.models.progress import InterviewReport, SkillMastery
-from app.models.knowledge import DocumentChunk, KnowledgeDocument
+from app.models.knowledge import DocumentChunk, KnowledgeDocument, KnowledgeSearchEvent, KnowledgeSearchFeedback
 from app.models.user import User
 from app.models.agent_audits import AgentDecisionLog
 
@@ -19,6 +19,8 @@ __all__ = [
     "JobDescription",
     "MatchAnalysis",
     "KnowledgeDocument",
+    "KnowledgeSearchEvent",
+    "KnowledgeSearchFeedback",
     "Resume",
     "SkillMastery",
     "User",

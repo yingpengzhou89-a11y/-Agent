@@ -1,5 +1,6 @@
 import io
 import re
+import time
 from collections import defaultdict
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -11,9 +12,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.errors import AppError
-from app.models.knowledge import DocumentChunk, KnowledgeDocument
+from app.models.knowledge import (
+    DocumentChunk,
+    KnowledgeDocument,
+    KnowledgeSearchFeedback,
+)
 from app.repositories.knowledge import KnowledgeRepository
-from app.schemas.knowledge import KnowledgeSearchResult
+from app.schemas.knowledge import KnowledgeRetrievalQualityRead, KnowledgeSearchResult
 
 
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".md", ".txt"}
@@ -152,9 +157,10 @@ class KnowledgeService:
         await session.flush()
         return document
 
-    async def search(
+    async def search_with_trace(
         self, session: AsyncSession, user_id: UUID, query: str, scope: list[str], top_k: int
-    ) -> list[KnowledgeSearchResult]:
+    ) -> tuple[list[KnowledgeSearchResult], dict[str, str | bool], int]:
+        started_at = time.perf_counter()
         candidates = await self.repo.chunks_for_user(session, user_id, scope)
         query_tokens = _tokens(query)
         fts_ranked = await self.repo.fts_chunks_for_user(session, user_id, scope, query)
@@ -175,7 +181,7 @@ class KnowledgeService:
             rankings.append([chunk.id for chunk, _ in vector_ranked])
             by_id.update({chunk.id: (chunk, document) for chunk, document in vector_ranked})
         fused = rrf_fuse(rankings)
-        return [
+        results = [
             KnowledgeSearchResult(
                 document_id=by_id[chunk_id][1].id,
                 chunk_id=chunk_id,
@@ -186,6 +192,57 @@ class KnowledgeService:
             )
             for chunk_id, score in sorted(fused.items(), key=lambda item: item[1], reverse=True)[:top_k]
         ]
+        retrieval_config: dict[str, str | bool] = {
+            "lexical_retriever": "postgres_fts" if fts_ranked else "keyword_fallback",
+            "vector_retriever": bool(settings.embedding_base_url and settings.embedding_api_key),
+            "fusion": "rrf",
+        }
+        latency_ms = round((time.perf_counter() - started_at) * 1000)
+        return results, retrieval_config, latency_ms
+
+    async def search(
+        self, session: AsyncSession, user_id: UUID, query: str, scope: list[str], top_k: int
+    ) -> list[KnowledgeSearchResult]:
+        return (await self.search_with_trace(session, user_id, query, scope, top_k))[0]
+
+    async def record_feedback(
+        self,
+        session: AsyncSession,
+        user_id: UUID,
+        search_event_id: UUID,
+        chunk_id: UUID,
+        relevance: str,
+    ) -> None:
+        event = await self.repo.get_search_event(session, user_id, search_event_id)
+        if str(chunk_id) not in event.result_chunk_ids_json:
+            raise AppError("VALIDATION_ERROR", "该引用不属于本次检索结果", status_code=422)
+        await self.repo.upsert_feedback(
+            session,
+            KnowledgeSearchFeedback(
+                user_id=user_id,
+                search_event_id=event.id,
+                chunk_id=chunk_id,
+                relevance=relevance,
+            ),
+        )
+
+    async def quality_overview(
+        self, session: AsyncSession, user_id: UUID
+    ) -> KnowledgeRetrievalQualityRead:
+        events = await self.repo.list_search_events(session, user_id)
+        feedback = await self.repo.list_feedback(session, user_id)
+        search_count = len(events)
+        feedback_count = len(feedback)
+        return KnowledgeRetrievalQualityRead(
+            search_count=search_count,
+            zero_result_rate=(sum(event.result_count == 0 for event in events) / search_count) if search_count else 0,
+            average_latency_ms=(sum(event.latency_ms for event in events) / search_count) if search_count else 0,
+            feedback_count=feedback_count,
+            feedback_coverage_rate=(feedback_count / sum(event.result_count for event in events)) if events else 0,
+            helpful_rate=(sum(item.relevance == "helpful" for item in feedback) / feedback_count)
+            if feedback_count
+            else None,
+        )
 
     @staticmethod
     def _keyword_score(query_tokens: list[str], content: str) -> float:

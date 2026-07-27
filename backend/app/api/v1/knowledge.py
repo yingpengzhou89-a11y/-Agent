@@ -7,8 +7,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import current_user_id
 from app.core.errors import AppError
 from app.db.session import get_db_session
+from app.models.knowledge import KnowledgeSearchEvent
 from app.repositories.knowledge import KnowledgeRepository
-from app.schemas.knowledge import KnowledgeDocumentRead, KnowledgeSearchRequest, KnowledgeSearchResult
+from app.schemas.knowledge import (
+    KnowledgeCitationFeedbackCreate,
+    KnowledgeDocumentRead,
+    KnowledgeRetrievalQualityRead,
+    KnowledgeSearchRequest,
+    KnowledgeSearchResponse,
+)
 from app.services.knowledge import KnowledgeService
 
 router = APIRouter(prefix="/api/v1/knowledge", tags=["knowledge"])
@@ -67,10 +74,50 @@ async def reindex_document(
     return KnowledgeDocumentRead.model_validate(document)
 
 
-@router.post("/search", response_model=list[KnowledgeSearchResult])
+@router.post("/search", response_model=KnowledgeSearchResponse)
 async def search(
     payload: KnowledgeSearchRequest,
     user_id: UUID = Depends(current_user_id),
     session: AsyncSession = Depends(get_db_session),
-) -> list[KnowledgeSearchResult]:
-    return await service.search(session, user_id, payload.query, payload.scope, payload.top_k)
+) -> KnowledgeSearchResponse:
+    results, retrieval_config, latency_ms = await service.search_with_trace(
+        session, user_id, payload.query, payload.scope, payload.top_k
+    )
+    event = await repository.create_search_event(
+        session,
+        KnowledgeSearchEvent(
+            user_id=user_id,
+            query=payload.query,
+            scope_json=payload.scope,
+            top_k=payload.top_k,
+            result_chunk_ids_json=[str(result.chunk_id) for result in results],
+            retrieval_config_json=retrieval_config,
+            result_count=len(results),
+            latency_ms=latency_ms,
+        ),
+    )
+    return KnowledgeSearchResponse(
+        search_id=event.id,
+        results=results,
+        retrieval_config=retrieval_config,
+    )
+
+
+@router.post("/search/{search_id}/feedback", status_code=status.HTTP_204_NO_CONTENT)
+async def record_feedback(
+    search_id: UUID,
+    payload: KnowledgeCitationFeedbackCreate,
+    user_id: UUID = Depends(current_user_id),
+    session: AsyncSession = Depends(get_db_session),
+) -> None:
+    await service.record_feedback(
+        session, user_id, search_id, payload.chunk_id, payload.relevance
+    )
+
+
+@router.get("/quality", response_model=KnowledgeRetrievalQualityRead)
+async def quality_overview(
+    user_id: UUID = Depends(current_user_id),
+    session: AsyncSession = Depends(get_db_session),
+) -> KnowledgeRetrievalQualityRead:
+    return await service.quality_overview(session, user_id)

@@ -4,3 +4,6 @@ export type Match = { id: string; report: { readiness_index: number; matching_ru
 export type Plan = { id: string; plan: { question_blueprints: Array<{ text: string; type: string; difficulty: string; skill_tags: string[] }> } }
 export type Session = { id: string; plan_id: string; status: string; current_question_index: number }
 export type Evaluation = { answer_id: string; overall_score: number; strengths: string[]; errors: Array<{ issue: string; deduction_reason: string }>; missing_points: string[]; improvement_advice: string[]; improved_answer: string; confidence: number }
+export type KnowledgeSearchResult = { document_id: string; chunk_id: string; content: string; source_type: string; source_name: string; score: number }
+export type KnowledgeSearchResponse = { search_id: string; results: KnowledgeSearchResult[]; retrieval_config: Record<string, string | boolean> }
+export type KnowledgeQuality = { search_count: number; zero_result_rate: number; average_latency_ms: number; feedback_count: number; feedback_coverage_rate: number; helpful_rate: number | null }
