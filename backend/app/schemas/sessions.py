@@ -74,6 +74,6 @@ class AnswerRead(BaseModel):
 
 class EvaluationRead(AnswerEvaluation):
     answer_id: UUID
-    rubric: dict[str, float] | None = None
+    rubric: dict[str, object] | None = None
     generation_config: dict[str, object] | None = None
     created_at: datetime
