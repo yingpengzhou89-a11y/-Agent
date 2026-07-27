@@ -29,6 +29,8 @@ class SkillMastery(UUIDPrimaryKeyMixin, Base):
     skill_name: Mapped[str] = mapped_column(String(255))
     mastery_score: Mapped[float] = mapped_column(Float)
     attempt_count: Mapped[int] = mapped_column(Integer, default=0)
+    consecutive_correct_count: Mapped[int] = mapped_column(Integer, default=0)
+    consecutive_incorrect_count: Mapped[int] = mapped_column(Integer, default=0)
     last_score: Mapped[float] = mapped_column(Float)
     last_practiced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     next_review_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)

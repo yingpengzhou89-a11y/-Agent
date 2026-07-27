@@ -22,6 +22,8 @@ class SkillMasteryRead(BaseModel):
     skill_name: str
     mastery_score: float = Field(ge=0, le=100)
     attempt_count: int
+    consecutive_correct_count: int = Field(ge=0)
+    consecutive_incorrect_count: int = Field(ge=0)
     last_score: float
     last_practiced_at: datetime
     next_review_at: datetime
