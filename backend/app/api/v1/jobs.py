@@ -25,7 +25,6 @@ async def create_job(
     session: AsyncSession = Depends(get_db_session),
 ) -> JobRead:
     job = await service.create(session, user_id, payload)
-    await session.commit()
     return JobRead.model_validate(job)
 
 
@@ -53,5 +52,4 @@ async def analyze_job(
     session: AsyncSession = Depends(get_db_session),
 ) -> JobAnalysisOutput:
     result = await analysis_service.analyze(session, user_id, job_id)
-    await session.commit()
     return result

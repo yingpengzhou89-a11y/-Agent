@@ -3,6 +3,7 @@ import re
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import AgentContext
@@ -248,19 +249,28 @@ class InterviewSessionService:
             return previous
         if interview.status == InterviewStatus.ANSWER_SAVED:
             raise AppError("WORKFLOW_STATE_ERROR", "当前题目已经提交过回答", status_code=409)
-        answer = await self.sessions.add_answer(
-            session,
-            InterviewAnswer(
-                question_id=question.id,
-                user_id=user_id,
-                answer_text=payload.answer_text,
-                duration_seconds=payload.duration_seconds,
-                hint_used=payload.hint_used,
-                idempotency_key=payload.idempotency_key,
-            ),
-        )
-        interview.status = InterviewStatus.ANSWER_SAVED
-        await session.flush()
+        try:
+            # The unique key is the final concurrency guard. A savepoint lets a
+            # racing retry recover without rolling back the whole request.
+            async with session.begin_nested():
+                answer = await self.sessions.add_answer(
+                    session,
+                    InterviewAnswer(
+                        question_id=question.id,
+                        user_id=user_id,
+                        answer_text=payload.answer_text,
+                        duration_seconds=payload.duration_seconds,
+                        hint_used=payload.hint_used,
+                        idempotency_key=payload.idempotency_key,
+                    ),
+                )
+                interview.status = InterviewStatus.ANSWER_SAVED
+                await session.flush()
+        except IntegrityError:
+            existing = await self.sessions.get_answer_by_key(session, question.id, payload.idempotency_key)
+            if existing is not None:
+                return existing
+            raise
         return answer
 
 

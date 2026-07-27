@@ -157,12 +157,16 @@ class KnowledgeService:
     ) -> list[KnowledgeSearchResult]:
         candidates = await self.repo.chunks_for_user(session, user_id, scope)
         query_tokens = _tokens(query)
-        keyword_ranked = sorted(
+        fts_ranked = await self.repo.fts_chunks_for_user(session, user_id, scope, query)
+        keyword_ranked = fts_ranked or sorted(
             candidates,
             key=lambda pair: self._keyword_score(query_tokens, pair[0].content),
             reverse=True,
         )
-        keyword_ranked = [pair for pair in keyword_ranked if self._keyword_score(query_tokens, pair[0].content) > 0][:20]
+        if not fts_ranked:
+            keyword_ranked = [
+                pair for pair in keyword_ranked if self._keyword_score(query_tokens, pair[0].content) > 0
+            ][:20]
         rankings = [[chunk.id for chunk, _ in keyword_ranked]]
         by_id = {chunk.id: (chunk, document) for chunk, document in candidates}
         if settings.embedding_base_url and settings.embedding_api_key:

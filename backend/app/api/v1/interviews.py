@@ -99,7 +99,6 @@ async def create_plan(
     session: AsyncSession = Depends(get_db_session),
 ) -> InterviewPlanRead:
     plan = await plan_service.create(session, user_id, payload)
-    await session.commit()
     return plan_read(plan)
 
 
@@ -119,7 +118,6 @@ async def create_session(
     session: AsyncSession = Depends(get_db_session),
 ) -> InterviewSessionRead:
     interview = await session_service.create(session, user_id, payload.plan_id)
-    await session.commit()
     return session_read(interview)
 
 
@@ -139,7 +137,6 @@ async def start_session(
     session: AsyncSession = Depends(get_db_session),
 ) -> InterviewSessionRead:
     interview = await session_service.start(session, user_id, session_id)
-    await session.commit()
     return session_read(interview)
 
 
@@ -150,7 +147,6 @@ async def pause_session(
     session: AsyncSession = Depends(get_db_session),
 ) -> InterviewSessionRead:
     interview = await session_service.pause(session, user_id, session_id)
-    await session.commit()
     return session_read(interview)
 
 
@@ -161,7 +157,6 @@ async def resume_session(
     session: AsyncSession = Depends(get_db_session),
 ) -> InterviewSessionRead:
     interview = await session_service.resume(session, user_id, session_id)
-    await session.commit()
     return session_read(interview)
 
 
@@ -195,7 +190,6 @@ async def submit_answer(
     session: AsyncSession = Depends(get_db_session),
 ) -> AnswerRead:
     answer = await session_service.submit_answer(session, user_id, session_id, payload)
-    await session.commit()
     return AnswerRead.model_validate(answer)
 
 
@@ -206,7 +200,6 @@ async def evaluate_answer(
     session: AsyncSession = Depends(get_db_session),
 ) -> EvaluationRead:
     evaluation = await evaluation_service.evaluate_current_answer(session, user_id, session_id)
-    await session.commit()
     return evaluation_read(evaluation)
 
 
@@ -227,7 +220,6 @@ async def generate_report(
     session: AsyncSession = Depends(get_db_session),
 ) -> InterviewReportRead:
     report = await report_service.generate(session, user_id, session_id)
-    await session.commit()
     return report_read(report)
 
 

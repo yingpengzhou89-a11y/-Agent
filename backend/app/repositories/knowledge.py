@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
@@ -60,6 +60,28 @@ class KnowledgeRepository:
             select(DocumentChunk, KnowledgeDocument)
             .join(KnowledgeDocument, KnowledgeDocument.id == DocumentChunk.document_id)
             .where(DocumentChunk.user_id == user_id, KnowledgeDocument.user_id == user_id)
+        )
+        if source_types:
+            statement = statement.where(KnowledgeDocument.source_type.in_(source_types))
+        return list((await session.execute(statement)).all())
+
+    async def fts_chunks_for_user(
+        self, session: AsyncSession, user_id: UUID, source_types: list[str], query: str
+    ) -> list[tuple[DocumentChunk, KnowledgeDocument]]:
+        """Return PostgreSQL full-text matches ordered by native rank."""
+        vector = func.to_tsvector("simple", DocumentChunk.content)
+        tsquery = func.websearch_to_tsquery("simple", query)
+        rank = func.ts_rank_cd(vector, tsquery).label("rank")
+        statement = (
+            select(DocumentChunk, KnowledgeDocument)
+            .join(KnowledgeDocument, KnowledgeDocument.id == DocumentChunk.document_id)
+            .where(
+                DocumentChunk.user_id == user_id,
+                KnowledgeDocument.user_id == user_id,
+                vector.op("@@")(tsquery),
+            )
+            .order_by(rank.desc())
+            .limit(20)
         )
         if source_types:
             statement = statement.where(KnowledgeDocument.source_type.in_(source_types))

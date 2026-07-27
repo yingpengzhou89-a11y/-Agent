@@ -185,7 +185,7 @@ stateDiagram-v2
 
 ## 项目知识库与 RAG
 
-上传项目 README、设计文档、Markdown、TXT 或 PDF 后，系统会解析并标题感知切分文档。调用 `POST /api/v1/knowledge/documents/{document_id}/reindex` 后会生成向量索引；未配置 Embedding 时，文档仍可使用关键词检索。
+上传项目 README、设计文档、Markdown、TXT 或 PDF 后，系统会解析并标题感知切分文档。调用 `POST /api/v1/knowledge/documents/{document_id}/reindex` 后会生成向量索引；检索使用 PostgreSQL FTS（`tsvector` + GIN）作为词法主召回，与向量结果做 RRF 融合；中文解析没有命中时会回退到轻量关键词召回。
 
 - `POST /api/v1/knowledge/documents`：`multipart/form-data` 上传文件，`source_type` 为 `project_docs` 或 `knowledge_base`；
 - `POST /api/v1/knowledge/search`：Hybrid Search，返回文档名、片段 ID、来源类型和融合分数；
@@ -218,7 +218,7 @@ python -m pytest -q
 
 ## 数据库演进说明
 
-Alembic 迁移按业务能力演进，而不是以迁移数量作为卖点：`01` 用户/简历/JD，`02` 匹配报告，`03` 面试计划、会话、问题与回答，`04` 单题评价，`05` 报告与掌握度，`06` 知识库与 pgvector，`07` 统一时区时间戳，`08` Agent 决策审计，`09` 评分 Rubric、调用配置和确定性检查。
+Alembic 迁移按业务能力演进，而不是以迁移数量作为卖点：`01` 用户/简历/JD，`02` 匹配报告，`03` 面试计划、会话、问题与回答，`04` 单题评价，`05` 报告与掌握度，`06` 知识库与 pgvector，`07` 统一时区时间戳，`08` Agent 决策审计，`09` 评分 Rubric、调用配置和确定性检查，`10` 动态复习间隔，`11` 知识片段 PostgreSQL FTS 索引。
 
 所有迁移均提供 `upgrade` / `downgrade`。其中 `09` 为历史评价新增可空追溯字段，不会改写或删除既有评价数据；历史记录没有这些元数据时，接口会返回 `null`，新生成的评价才会完整写入。
 

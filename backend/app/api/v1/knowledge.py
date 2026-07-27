@@ -28,7 +28,6 @@ async def upload_document(
     if not file.filename:
         raise AppError("FILE_PARSE_ERROR", "缺少文件名", status_code=422)
     document = await service.ingest_file(session, user_id, source_type, file.filename, await file.read())
-    await session.commit()
     return KnowledgeDocumentRead.model_validate(document)
 
 
@@ -56,7 +55,6 @@ async def delete_document(
     session: AsyncSession = Depends(get_db_session),
 ) -> None:
     await service.delete(session, user_id, document_id)
-    await session.commit()
 
 
 @router.post("/documents/{document_id}/reindex", response_model=KnowledgeDocumentRead)
@@ -66,7 +64,6 @@ async def reindex_document(
     session: AsyncSession = Depends(get_db_session),
 ) -> KnowledgeDocumentRead:
     document = await service.reindex(session, user_id, document_id)
-    await session.commit()
     return KnowledgeDocumentRead.model_validate(document)
 
 

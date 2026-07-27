@@ -13,6 +13,4 @@ users = UserRepository()
 @router.post("", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 async def create_user(payload: UserCreate, session: AsyncSession = Depends(get_db_session)) -> User:
     user = await users.create(session, User(display_name=payload.display_name, email=payload.email))
-    await session.commit()
     return user
-

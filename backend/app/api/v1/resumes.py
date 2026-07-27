@@ -26,7 +26,6 @@ async def create_resume(
     session: AsyncSession = Depends(get_db_session),
 ) -> ResumeRead:
     resume = await service.create(session, user_id, payload)
-    await session.commit()
     return ResumeRead.model_validate(resume)
 
 
@@ -41,7 +40,6 @@ async def upload_resume(
         from app.core.errors import AppError
         raise AppError("FILE_PARSE_ERROR", "未提供简历文件名", status_code=422)
     resume = await service.create_from_file(session, user_id, file.filename, await file.read(), name)
-    await session.commit()
     return ResumeRead.model_validate(resume)
 
 
@@ -69,5 +67,4 @@ async def analyze_resume(
     session: AsyncSession = Depends(get_db_session),
 ) -> ResumeAnalysisOutput:
     result = await analysis_service.analyze(session, user_id, resume_id)
-    await session.commit()
     return result

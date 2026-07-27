@@ -32,7 +32,6 @@ async def create_match(
     session: AsyncSession = Depends(get_db_session),
 ) -> MatchRead:
     match = await service.create_report(session, user_id, payload.resume_id, payload.job_id)
-    await session.commit()
     return to_read(match)
 
 
