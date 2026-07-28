@@ -1,0 +1,15 @@
+{
+  "name": "personal-project-retrieval-v1",
+  "cases": [
+    {
+      "id": "rag-evaluation",
+      "query": "项目中的 RAG 检索效果如何评估？",
+      "expected_source_names": ["project_architecture.md"]
+    },
+    {
+      "id": "api-design",
+      "query": "后端接口为什么使用 FastAPI？",
+      "expected_source_names": ["project_architecture.md"]
+    }
+  ]
+}

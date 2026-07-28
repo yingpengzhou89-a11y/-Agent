@@ -218,7 +218,7 @@ python -m ruff check app tests
 python -m pytest -q
 ```
 
-测试覆盖：Schema 与 Rubric 重算、固定回答评测集、岗位匹配的 70/20/10 规则与证据引用、用户 ACL 的知识检索、检索质量指标聚合、会话暂停/恢复和幂等回答、模型不可用时的计划/评价降级与会话继续推进。固定回答集的使用方式见 [docs/evaluation_benchmark.md](docs/evaluation_benchmark.md)。
+测试覆盖：Schema 与 Rubric 重算、固定回答评测集、岗位匹配的 70/20/10 规则与证据引用、用户 ACL 的知识检索、检索质量指标聚合、离线 RAG 的 Recall@K/MRR/nDCG、会话暂停/恢复和幂等回答、模型不可用时的计划/评价降级与会话继续推进。固定回答集的使用方式见 [docs/evaluation_benchmark.md](docs/evaluation_benchmark.md)，检索评测使用方式见 [docs/retrieval_benchmark.md](docs/retrieval_benchmark.md)。
 
 ## 数据库演进说明
 
