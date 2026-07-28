@@ -29,6 +29,13 @@ def test_rrf_fusion_rewards_results_found_by_multiple_retrievers() -> None:
     assert scores[shared] > scores[vector_only]
 
 
+def test_character_ngram_fallback_tolerates_chinese_phrase_reordering() -> None:
+    document = "项目使用 FastAPI 构建 RAG 检索服务，并通过评估指标验证效果。"
+    reordered_query = "RAG 检索服务使用 FastAPI 构建"
+
+    assert KnowledgeService._keyword_score(reordered_query, document) > 1
+
+
 @pytest.mark.asyncio
 async def test_retrieval_quality_aggregates_feedback_and_latency(tmp_path: Path) -> None:
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'knowledge-quality.db'}")

@@ -63,6 +63,19 @@ def _tokens(text: str) -> list[str]:
     return re.findall(r"[a-z0-9+#.]+|[\u4e00-\u9fff]{2,}", text.casefold())
 
 
+def _character_ngrams(text: str, width: int = 2) -> set[str]:
+    """Build language-neutral character n-grams for the no-embedding fallback.
+
+    PostgreSQL's built-in ``simple`` text-search configuration has no Chinese
+    tokenizer. Character n-grams preserve partial overlap when a user swaps
+    phrase order, while ASCII terms are still scored as whole tokens.
+    """
+    normalized = "".join(re.findall(r"[a-z0-9+#.]|[\u4e00-\u9fff]", text.casefold()))
+    if len(normalized) < width:
+        return {normalized} if normalized else set()
+    return {normalized[index : index + width] for index in range(len(normalized) - width + 1)}
+
+
 def rrf_fuse(rankings: list[list[UUID]], k: int = 60) -> dict[UUID, float]:
     scores: dict[UUID, float] = defaultdict(float)
     for ranking in rankings:
@@ -162,17 +175,21 @@ class KnowledgeService:
     ) -> tuple[list[KnowledgeSearchResult], dict[str, str | bool], int]:
         started_at = time.perf_counter()
         candidates = await self.repo.chunks_for_user(session, user_id, scope)
-        query_tokens = _tokens(query)
         fts_ranked = await self.repo.fts_chunks_for_user(session, user_id, scope, query)
-        keyword_ranked = fts_ranked or sorted(
+        fallback_ranked = sorted(
             candidates,
-            key=lambda pair: self._keyword_score(query_tokens, pair[0].content),
+            key=lambda pair: self._keyword_score(query, pair[0].content),
             reverse=True,
         )
-        if not fts_ranked:
-            keyword_ranked = [
-                pair for pair in keyword_ranked if self._keyword_score(query_tokens, pair[0].content) > 0
-            ][:20]
+        fallback_ranked = [
+            pair for pair in fallback_ranked if self._keyword_score(query, pair[0].content) > 0
+        ][:20]
+        # FTS is efficient for tokenized languages; character n-grams supplement
+        # it for Chinese and phrasing/order changes. Keep FTS results first but
+        # retain unique fallback candidates to avoid zero-recall surprises.
+        keyword_ranked = fts_ranked + [
+            pair for pair in fallback_ranked if pair[0].id not in {chunk.id for chunk, _ in fts_ranked}
+        ]
         rankings = [[chunk.id for chunk, _ in keyword_ranked]]
         by_id = {chunk.id: (chunk, document) for chunk, document in candidates}
         if settings.embedding_base_url and settings.embedding_api_key:
@@ -193,7 +210,7 @@ class KnowledgeService:
             for chunk_id, score in sorted(fused.items(), key=lambda item: item[1], reverse=True)[:top_k]
         ]
         retrieval_config: dict[str, str | bool] = {
-            "lexical_retriever": "postgres_fts" if fts_ranked else "keyword_fallback",
+            "lexical_retriever": "postgres_fts+char_ngram" if fts_ranked else "char_ngram_fallback",
             "vector_retriever": bool(settings.embedding_base_url and settings.embedding_api_key),
             "fusion": "rrf",
         }
@@ -245,6 +262,11 @@ class KnowledgeService:
         )
 
     @staticmethod
-    def _keyword_score(query_tokens: list[str], content: str) -> float:
+    def _keyword_score(query: str, content: str) -> float:
+        query_tokens = _tokens(query)
         normalized = content.casefold()
-        return sum(normalized.count(token) for token in query_tokens)
+        token_score = sum(normalized.count(token) for token in query_tokens)
+        query_ngrams = _character_ngrams(query)
+        content_ngrams = _character_ngrams(content)
+        ngram_recall = len(query_ngrams & content_ngrams) / len(query_ngrams) if query_ngrams else 0
+        return token_score + ngram_recall

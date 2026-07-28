@@ -185,7 +185,7 @@ stateDiagram-v2
 
 ## 项目知识库与 RAG
 
-上传项目 README、设计文档、Markdown、TXT 或 PDF 后，系统会解析并标题感知切分文档。调用 `POST /api/v1/knowledge/documents/{document_id}/reindex` 后会生成向量索引；检索使用 PostgreSQL FTS（`tsvector` + GIN）作为词法主召回，与向量结果做 RRF 融合；中文解析没有命中时会回退到轻量关键词召回。
+上传项目 README、设计文档、Markdown、TXT 或 PDF 后，系统会解析并标题感知切分文档。调用 `POST /api/v1/knowledge/documents/{document_id}/reindex` 后会生成向量索引；检索使用 PostgreSQL FTS（`tsvector` + GIN）作为词法主召回，与向量结果做 RRF 融合；未配置 Embedding 时，中文查询会采用字符 n-gram 回退，容忍语序调整与部分词汇差异。
 
 - `POST /api/v1/knowledge/documents`：`multipart/form-data` 上传文件，`source_type` 为 `project_docs` 或 `knowledge_base`；
 - `POST /api/v1/knowledge/search`：Hybrid Search，返回检索记录 ID、召回策略、文档名、片段 ID、来源类型和融合分数；
