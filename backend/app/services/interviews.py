@@ -32,7 +32,9 @@ from app.schemas.interview import (
     SessionSnapshot,
 )
 from app.schemas.profiles import CandidateProfile, JobProfile
+from app.schemas.profiles import SourceRef
 from app.schemas.sessions import AnswerCreate, InterviewPlanCreate
+from app.services.knowledge import KnowledgeService
 from app.services.model_gateway import StructuredModelGateway
 from app.workflows.interview_state_machine import InterviewStatus
 
@@ -181,6 +183,7 @@ class InterviewSessionService:
     def __init__(self) -> None:
         self.plans = InterviewPlanRepository()
         self.sessions = InterviewSessionRepository()
+        self.knowledge = KnowledgeService()
 
     async def create(self, session: AsyncSession, user_id: UUID, plan_id: UUID) -> InterviewSession:
         await self.plans.get_for_user(session, user_id, plan_id)
@@ -193,7 +196,7 @@ class InterviewSessionService:
         plan = await self.plans.get_for_user(session, user_id, interview.plan_id)
         draft = InterviewPlanDraft.model_validate(plan.plan_json)
         interview.status = InterviewStatus.PREPARING
-        blueprint = draft.question_blueprints[0]
+        blueprint = await self._ground_question(session, user_id, draft.question_blueprints[0])
         await self.sessions.add_question(
             session,
             InterviewQuestion(
@@ -212,6 +215,14 @@ class InterviewSessionService:
         interview.started_at = datetime.now(timezone.utc)
         await session.flush()
         return interview
+
+    async def _ground_question(
+        self, session: AsyncSession, user_id: UUID, question: InterviewQuestionDraft
+    ) -> InterviewQuestionDraft:
+        refs = await _retrieve_project_context(
+            self.knowledge, session, user_id, f"{question.text} {' '.join(question.skill_tags)}"
+        )
+        return _with_sources(question, refs)
 
     async def pause(self, session: AsyncSession, user_id: UUID, session_id: UUID) -> InterviewSession:
         interview = await self.sessions.get_for_user(session, user_id, session_id)
@@ -284,6 +295,7 @@ class EvaluationWorkflowService:
         self.jobs = JobRepository()
         self.evaluations = EvaluationRepository()
         self.audits = AgentDecisionRepository()
+        self.knowledge = KnowledgeService()
 
     async def evaluate_current_answer(
         self, session: AsyncSession, user_id: UUID, session_id: UUID
@@ -306,6 +318,16 @@ class EvaluationWorkflowService:
         job_profile = JobProfile.model_validate(job.parsed_requirements_json)
         rubric = EvaluationRubric()
         interview.status = InterviewStatus.EVALUATING
+        question_refs = [SourceRef.model_validate(ref) for ref in question.source_refs_json]
+        retrieved_context = _merge_sources(
+            question_refs,
+            await _retrieve_project_context(
+                self.knowledge,
+                session,
+                user_id,
+                f"{question.question_text} {' '.join(question.skill_tags_json)} {answer.answer_text}",
+            ),
+        )
         evaluation_input = EvaluationAgentInput(
             question=InterviewQuestionDraft(
                 text=question.question_text,
@@ -317,7 +339,7 @@ class EvaluationWorkflowService:
             ),
             user_answer=answer.answer_text,
             candidate_profile=candidate,
-            retrieved_context=[],
+            retrieved_context=retrieved_context,
             evaluation_rubric=rubric,
             interview_level=job_profile.seniority if job_profile.seniority != "unknown" else "junior",
         )
@@ -361,6 +383,7 @@ class EvaluationWorkflowService:
                     "skill_tags": question.skill_tags_json,
                     "answer_char_count": deterministic_checks.answer_char_count,
                     "rubric_version": rubric.version,
+                    "retrieved_chunk_ids": [str(ref.chunk_id) for ref in retrieved_context],
                 },
                 output_json={
                     "overall_score": result.overall_score,
@@ -465,6 +488,12 @@ class EvaluationWorkflowService:
     ) -> None:
         config = InterviewConfig.model_validate(plan.config_json)
         fingerprints = await self.sessions.list_fingerprints(session, interview.id)
+        retrieved_context = await _retrieve_project_context(
+            self.knowledge,
+            session,
+            user_id,
+            f"{question.question_text} {' '.join(question.skill_tags_json)} {' '.join(evaluation.missing_points)}",
+        )
         try:
             decision = await self.interviewer.run(
                 AgentContext(
@@ -493,7 +522,7 @@ class EvaluationWorkflowService:
                         gaps=[*evaluation.missing_points, *(issue.issue for issue in evaluation.errors)],
                         confidence=evaluation.confidence,
                     ),
-                    retrieved_context=[],
+                    retrieved_context=retrieved_context,
                 ),
             )
             execution_mode = "model"
@@ -511,7 +540,9 @@ class EvaluationWorkflowService:
                 interview.status = InterviewStatus.COMPLETED
                 interview.completed_at = datetime.now(timezone.utc)
             else:
-                await self._add_question(session, interview, next_question)
+                await self._add_question(
+                    session, interview, await self._ground_question(session, user_id, next_question, retrieved_context)
+                )
                 interview.follow_up_count = 0
                 interview.status = InterviewStatus.WAITING_ANSWER
             return
@@ -526,7 +557,12 @@ class EvaluationWorkflowService:
             decision.reason,
         )
         if decision.action == "follow_up" and interview.follow_up_count < config.max_follow_ups:
-            await self._add_question(session, interview, decision.question, parent_id=question.id)
+            await self._add_question(
+                session,
+                interview,
+                await self._ground_question(session, user_id, decision.question, retrieved_context),
+                parent_id=question.id,
+            )
             interview.follow_up_count += 1
             interview.status = InterviewStatus.WAITING_ANSWER
             return
@@ -536,7 +572,9 @@ class EvaluationWorkflowService:
                 interview.status = InterviewStatus.COMPLETED
                 interview.completed_at = datetime.now(timezone.utc)
                 return
-            await self._add_question(session, interview, next_question)
+            await self._add_question(
+                session, interview, await self._ground_question(session, user_id, next_question, retrieved_context)
+            )
             interview.follow_up_count = 0
             interview.status = InterviewStatus.WAITING_ANSWER
             return
@@ -570,6 +608,7 @@ class EvaluationWorkflowService:
                     "skill_tags": question.skill_tags_json,
                     "follow_up_count": interview.follow_up_count,
                     "max_follow_ups": config.max_follow_ups,
+                    "retrieved_chunk_ids": [str(ref["chunk_id"]) for ref in question.source_refs_json],
                 },
                 output_json={"reason": reason, "current_question_index": interview.current_question_index},
                 model_name=settings.chat_model or "unconfigured",
@@ -599,9 +638,53 @@ class EvaluationWorkflowService:
             ),
         )
 
+    async def _ground_question(
+        self,
+        session: AsyncSession,
+        user_id: UUID,
+        question: InterviewQuestionDraft,
+        retrieved_context: list[SourceRef],
+    ) -> InterviewQuestionDraft:
+        return _with_sources(question, retrieved_context)
+
     @staticmethod
     def _next_blueprint(plan: InterviewPlan, existing_fingerprints: list[str]):
         for blueprint in InterviewPlanDraft.model_validate(plan.plan_json).question_blueprints:
             if question_fingerprint(blueprint.text, blueprint.skill_tags) not in existing_fingerprints:
                 return blueprint
         return None
+
+
+async def _retrieve_project_context(
+    knowledge: KnowledgeService, session: AsyncSession, user_id: UUID, query: str
+) -> list[SourceRef]:
+    """Best-effort RAG: an unavailable retriever must never block an interview."""
+    try:
+        results = await knowledge.search(
+            session, user_id, query, ["project_docs", "knowledge_base"], top_k=4
+        )
+    except Exception:
+        return []
+    return [
+        SourceRef(
+            document_id=result.document_id,
+            chunk_id=result.chunk_id,
+            source_type=result.source_type,
+            source_name=result.source_name,
+            quote=result.content[:2000],
+            score=result.score,
+        )
+        for result in results
+    ]
+
+
+def _merge_sources(*source_lists: list[SourceRef]) -> list[SourceRef]:
+    merged: dict[UUID, SourceRef] = {}
+    for sources in source_lists:
+        for source in sources:
+            merged.setdefault(source.chunk_id, source)
+    return list(merged.values())[:4]
+
+
+def _with_sources(question: InterviewQuestionDraft, sources: list[SourceRef]) -> InterviewQuestionDraft:
+    return question.model_copy(update={"source_refs": _merge_sources(question.source_refs, sources)})

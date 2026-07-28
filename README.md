@@ -194,6 +194,8 @@ stateDiagram-v2
 - `DELETE /api/v1/knowledge/documents/{document_id}`：删除原始文件与索引；
 - 所有文档、切片和检索均以 `user_id` 为第一层 ACL 过滤，不跨用户返回结果。
 
+面试流程会在首题、追问和单题评价时按题目、技能标签与当前回答检索项目资料；命中的片段作为 `source_refs` 持久化到题目，并同时注入 Agent 上下文和审计日志。检索异常或资料为空时自动降级为空上下文，不阻断面试状态机。
+
 ## 目录
 
 ```text

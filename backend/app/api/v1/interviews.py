@@ -179,6 +179,7 @@ async def current_question(
         difficulty=question.difficulty,
         skill_tags=question.skill_tags_json,
         order_index=question.order_index,
+        source_refs=question.source_refs_json,
     )
 
 

@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.interview import InterviewConfig, InterviewPlanDraft
 from app.schemas.interview import AnswerEvaluation
+from app.schemas.profiles import SourceRef
 
 
 class InterviewPlanCreate(BaseModel):
@@ -39,6 +40,7 @@ class InterviewQuestionRead(BaseModel):
     difficulty: str
     skill_tags: list[str]
     order_index: int
+    source_refs: list[SourceRef] = []
 
 
 class InterviewSessionRead(BaseModel):
