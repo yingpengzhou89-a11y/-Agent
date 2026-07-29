@@ -45,22 +45,56 @@ def extract_text(filename: str, raw: bytes) -> str:
         raise AppError("FILE_PARSE_ERROR", "文件无法解析，请确认它没有损坏或加密", status_code=422) from exc
 
 
-def chunk_text(text: str, max_chars: int = 3000, overlap: int = 400) -> list[tuple[str, dict]]:
+def _split_long_unit(text: str, max_chars: int) -> list[str]:
+    if len(text) <= max_chars:
+        return [text]
+    sentences = [item.strip() for item in re.split(r"(?<=[。！？；.!?;])", text) if item.strip()]
+    units: list[str] = []
+    buffer = ""
+    for sentence in sentences:
+        if len(sentence) > max_chars:
+            if buffer:
+                units.append(buffer)
+                buffer = ""
+            units.extend(sentence[index : index + max_chars] for index in range(0, len(sentence), max_chars))
+        elif buffer and len(buffer) + len(sentence) > max_chars:
+            units.append(buffer)
+            buffer = sentence
+        else:
+            buffer += sentence
+    if buffer:
+        units.append(buffer)
+    return units
+
+
+def chunk_text(text: str, max_chars: int = 900, overlap: int = 120) -> list[tuple[str, dict]]:
+    """Create focused RAG chunks while retaining section heading and local context."""
     lines = [line.rstrip() for line in text.splitlines() if line.strip()]
     chunks: list[tuple[str, dict]] = []
     heading = ""
     buffer = ""
+
+    def emit() -> None:
+        nonlocal buffer
+        if buffer.strip():
+            chunks.append((buffer.strip(), {"heading": heading}))
+        buffer = ""
+
     for line in lines:
         if line.lstrip().startswith("#"):
+            emit()
             heading = line.lstrip("# ").strip()
-        candidate = f"{buffer}\n{line}".strip()
-        if len(candidate) > max_chars and buffer:
-            chunks.append((buffer, {"heading": heading}))
-            buffer = f"{buffer[-overlap:]}\n{line}".strip()
-        else:
-            buffer = candidate
-    if buffer:
-        chunks.append((buffer, {"heading": heading}))
+            buffer = f"# {heading}"
+            continue
+        for unit in _split_long_unit(line, max_chars):
+            candidate = f"{buffer}\n{unit}".strip()
+            if len(candidate) > max_chars and buffer:
+                previous = buffer
+                emit()
+                buffer = f"{previous[-overlap:]}\n{unit}".strip()
+            else:
+                buffer = candidate
+    emit()
     return chunks
 
 
@@ -175,6 +209,28 @@ class KnowledgeService:
         await session.flush()
         return document
 
+    async def rechunk_and_reindex(self, session: AsyncSession, user_id: UUID, document_id: UUID) -> KnowledgeDocument:
+        """Reparse the original file, then atomically replace old chunks after embeddings succeed."""
+        document = await self.repo.get_document(session, user_id, document_id)
+        if not document.file_path or not Path(document.file_path).is_file():
+            raise AppError("RETRIEVAL_ERROR", "原始文件不存在，无法重新切分", status_code=409)
+        raw = Path(document.file_path).read_bytes()
+        text = extract_text(document.name, raw)
+        chunks = [
+            DocumentChunk(document_id=document.id, user_id=user_id, content=content, metadata_json=metadata)
+            for content, metadata in chunk_text(text)
+        ]
+        if not chunks:
+            raise AppError("RETRIEVAL_ERROR", "文档没有可索引的片段", status_code=409)
+        document.index_status = "INDEXING"
+        vectors = await self.embeddings.embed([chunk.content for chunk in chunks])
+        for chunk, vector in zip(chunks, vectors, strict=True):
+            chunk.embedding = vector
+        await self.repo.replace_chunks(session, document, chunks)
+        document.index_status = "INDEXED"
+        await session.flush()
+        return document
+
     async def embedding_status(self, session: AsyncSession, user_id: UUID) -> EmbeddingStatusRead:
         documents = await self.repo.list_documents(session, user_id)
         indexed = sum(document.index_status == "INDEXED" for document in documents)
@@ -195,6 +251,27 @@ class KnowledgeService:
         for document in documents:
             try:
                 await self.reindex(session, user_id, document.id)
+                indexed_count += 1
+            except AppError as exc:
+                document.index_status = "KEYWORD_READY"
+                failures.append({"document_id": str(document.id), "name": document.name, "reason": exc.message})
+        await session.flush()
+        return BulkReindexRead(
+            total_document_count=len(documents),
+            indexed_document_count=indexed_count,
+            failed_document_count=len(failures),
+            failures=failures,
+        )
+
+    async def rechunk_and_reindex_all(self, session: AsyncSession, user_id: UUID) -> BulkReindexRead:
+        if not settings.embedding_base_url or not settings.embedding_api_key:
+            raise AppError("EMBEDDING_NOT_CONFIGURED", "请先配置 Embedding 服务", status_code=409)
+        documents = await self.repo.list_documents(session, user_id)
+        failures: list[dict[str, str]] = []
+        indexed_count = 0
+        for document in documents:
+            try:
+                await self.rechunk_and_reindex(session, user_id, document.id)
                 indexed_count += 1
             except AppError as exc:
                 document.index_status = "KEYWORD_READY"

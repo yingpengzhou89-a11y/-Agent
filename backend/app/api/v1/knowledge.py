@@ -92,6 +92,14 @@ async def reindex_all_documents(
     return await service.reindex_all(session, user_id)
 
 
+@router.post("/documents/rechunk-and-reindex-all", response_model=BulkReindexRead)
+async def rechunk_and_reindex_all_documents(
+    user_id: UUID = Depends(current_user_id),
+    session: AsyncSession = Depends(get_db_session),
+) -> BulkReindexRead:
+    return await service.rechunk_and_reindex_all(session, user_id)
+
+
 @router.post("/search", response_model=KnowledgeSearchResponse)
 async def search(
     payload: KnowledgeSearchRequest,

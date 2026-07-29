@@ -18,6 +18,16 @@ def test_chunker_preserves_heading_metadata() -> None:
     assert chunks[0][1]["heading"] == "架构"
 
 
+def test_chunker_splits_long_paragraph_into_focused_overlapping_chunks() -> None:
+    text = "。".join(f"第 {index} 段介绍 RAG 的一个实现细节" for index in range(100))
+
+    chunks = chunk_text(text, max_chars=120, overlap=20)
+
+    assert len(chunks) > 2
+    assert max(len(content) for content, _ in chunks) <= 150
+    assert "实现细节" in chunks[0][0]
+
+
 def test_rrf_fusion_rewards_results_found_by_multiple_retrievers() -> None:
     shared = uuid4()
     keyword_only = uuid4()
