@@ -34,3 +34,20 @@ class ProgressOverview(BaseModel):
     evaluated_answers: int
     weakest_topics: list[str]
     next_reviews: list[SkillMasteryRead]
+
+
+class InterviewHistoryItemRead(BaseModel):
+    """A completed interview paired with its generated whole-session report."""
+
+    session_id: UUID
+    overall_score: float
+    evaluated_question_count: int
+    weak_topics: list[str]
+    completed_at: datetime | None
+    report_created_at: datetime
+
+
+class ProgressHistoryRead(BaseModel):
+    history: list[InterviewHistoryItemRead]
+    score_change: float | None
+    recent_average_score: float | None

@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import current_user_id
 from app.db.session import get_db_session
 from app.repositories.progress import ProgressRepository
-from app.schemas.progress import ProgressOverview, SkillMasteryRead
+from app.schemas.progress import ProgressHistoryRead, ProgressOverview, SkillMasteryRead
 from app.services.progress import ProgressService
 
 router = APIRouter(prefix="/api/v1/progress", tags=["progress"])
@@ -20,6 +20,14 @@ async def overview(
     session: AsyncSession = Depends(get_db_session),
 ) -> ProgressOverview:
     return await service.overview(session, user_id)
+
+
+@router.get("/history", response_model=ProgressHistoryRead)
+async def history(
+    user_id: UUID = Depends(current_user_id),
+    session: AsyncSession = Depends(get_db_session),
+) -> ProgressHistoryRead:
+    return await service.history(session, user_id)
 
 
 @router.get("/skills", response_model=list[SkillMasteryRead])

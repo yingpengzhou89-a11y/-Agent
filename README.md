@@ -101,7 +101,7 @@ alembic upgrade head
 - `GET /api/v1/interviews/{id}/question`；
 - `POST /api/v1/interviews/{id}/answers`；
 - `POST /api/v1/interviews/{id}/report/regenerate`、`GET /api/v1/interviews/{id}/report`；
-- `GET /api/v1/progress/overview|skills|weak-topics|review-plan`；
+- `GET /api/v1/progress/overview|history|skills|weak-topics|review-plan`；
 - `GET /health`。
 
 除创建用户外，以上业务接口都必须包含 `X-User-ID: <用户 UUID>`。

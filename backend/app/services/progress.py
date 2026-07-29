@@ -10,13 +10,19 @@ from app.models.interviews import InterviewSession
 from app.models.progress import InterviewReport, SkillMastery
 from app.repositories.interviews import InterviewSessionRepository
 from app.repositories.progress import ProgressRepository, ReportRepository
-from app.schemas.progress import ProgressOverview, SkillMasteryRead
+from app.schemas.progress import (
+    InterviewHistoryItemRead,
+    ProgressHistoryRead,
+    ProgressOverview,
+    SkillMasteryRead,
+)
 from app.workflows.interview_state_machine import InterviewStatus
 
 
 class ProgressService:
     def __init__(self) -> None:
         self.progress = ProgressRepository()
+        self.reports = ReportRepository()
 
     async def apply_skill_scores(
         self, session: AsyncSession, user_id: UUID, skill_scores: dict[str, list[int]]
@@ -115,6 +121,29 @@ class ProgressService:
             evaluated_answers=evaluated or 0,
             weakest_topics=[item.skill_name for item in skills[:5]],
             next_reviews=[SkillMasteryRead.model_validate(item) for item in skills[:5]],
+        )
+
+    async def history(self, session: AsyncSession, user_id: UUID) -> ProgressHistoryRead:
+        return self._build_history(await self.reports.list_history_for_user(session, user_id))
+
+    @staticmethod
+    def _build_history(rows) -> ProgressHistoryRead:
+        items = [
+            InterviewHistoryItemRead(
+                session_id=interview.id,
+                overall_score=float(report.summary_json.get("overall_score", 0)),
+                evaluated_question_count=int(report.summary_json.get("evaluated_question_count", 0)),
+                weak_topics=list(report.weak_topics_json or report.summary_json.get("weak_topics", [])),
+                completed_at=interview.completed_at,
+                report_created_at=report.created_at,
+            )
+            for report, interview in rows
+        ]
+        scores = [item.overall_score for item in items]
+        return ProgressHistoryRead(
+            history=items,
+            score_change=round(scores[0] - scores[1], 1) if len(scores) >= 2 else None,
+            recent_average_score=round(sum(scores[:3]) / min(3, len(scores)), 1) if scores else None,
         )
 
 

@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.evaluations import AnswerEvaluation
-from app.models.interviews import InterviewAnswer, InterviewQuestion
+from app.models.interviews import InterviewAnswer, InterviewQuestion, InterviewSession
 from app.models.progress import InterviewReport, SkillMastery
 
 
@@ -25,6 +25,16 @@ class ReportRepository:
             .join(AnswerEvaluation, AnswerEvaluation.answer_id == InterviewAnswer.id)
             .where(InterviewQuestion.session_id == session_id)
             .order_by(InterviewQuestion.order_index)
+        )
+        return result.all()
+
+    async def list_history_for_user(self, session: AsyncSession, user_id: UUID, limit: int = 20):
+        result = await session.execute(
+            select(InterviewReport, InterviewSession)
+            .join(InterviewSession, InterviewSession.id == InterviewReport.session_id)
+            .where(InterviewSession.user_id == user_id)
+            .order_by(InterviewSession.completed_at.desc(), InterviewReport.created_at.desc())
+            .limit(limit)
         )
         return result.all()
 
