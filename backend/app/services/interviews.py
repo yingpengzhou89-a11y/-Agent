@@ -661,7 +661,7 @@ async def _retrieve_project_context(
     """Best-effort RAG: an unavailable retriever must never block an interview."""
     try:
         results = await knowledge.search(
-            session, user_id, query, ["project_docs", "knowledge_base"], top_k=4
+            session, user_id, query, ["project_docs", "knowledge_base"], top_k=3
         )
     except Exception:
         return []

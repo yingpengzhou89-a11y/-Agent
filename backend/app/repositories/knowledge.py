@@ -149,10 +149,10 @@ class KnowledgeRepository:
 
     async def vector_chunks_for_user(
         self, session: AsyncSession, user_id: UUID, source_types: list[str], query_vector: list[float]
-    ) -> list[tuple[DocumentChunk, KnowledgeDocument]]:
+    ) -> list[tuple[DocumentChunk, KnowledgeDocument, float]]:
         distance = DocumentChunk.embedding.cosine_distance(query_vector).label("distance")
         statement = (
-            select(DocumentChunk, KnowledgeDocument)
+            select(DocumentChunk, KnowledgeDocument, distance)
             .join(KnowledgeDocument, KnowledgeDocument.id == DocumentChunk.document_id)
             .where(
                 DocumentChunk.user_id == user_id,
@@ -164,4 +164,4 @@ class KnowledgeRepository:
         )
         if source_types:
             statement = statement.where(KnowledgeDocument.source_type.in_(source_types))
-        return list((await session.execute(statement)).all())
+        return [(chunk, document, float(value)) for chunk, document, value in (await session.execute(statement)).all()]

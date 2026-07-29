@@ -296,7 +296,7 @@ class KnowledgeService:
             reverse=True,
         )
         fallback_ranked = [
-            pair for pair in fallback_ranked if self._keyword_score(query, pair[0].content) > 0
+            pair for pair in fallback_ranked if self._keyword_score(query, pair[0].content) >= 0.12
         ][:20]
         # FTS is efficient for tokenized languages; character n-grams supplement
         # it for Chinese and phrasing/order changes. Keep FTS results first but
@@ -306,12 +306,42 @@ class KnowledgeService:
         ]
         rankings = [[chunk.id for chunk, _ in keyword_ranked]]
         by_id = {chunk.id: (chunk, document) for chunk, document in candidates}
+        lexical_scores = {chunk.id: self._keyword_score(query, chunk.content) for chunk, _ in candidates}
+        semantic_scores: dict[UUID, float] = {}
         if settings.embedding_base_url and settings.embedding_api_key:
             vector = (await self.embeddings.embed([query]))[0]
             vector_ranked = await self.repo.vector_chunks_for_user(session, user_id, scope, vector)
-            rankings.append([chunk.id for chunk, _ in vector_ranked])
-            by_id.update({chunk.id: (chunk, document) for chunk, document in vector_ranked})
+            rankings.append([chunk.id for chunk, _, _ in vector_ranked])
+            by_id.update({chunk.id: (chunk, document) for chunk, document, _ in vector_ranked})
+            semantic_scores = {chunk.id: max(0.0, 1 - distance) for chunk, _, distance in vector_ranked}
         fused = rrf_fuse(rankings)
+        max_lexical_score = max(lexical_scores.values(), default=1)
+        max_fused_score = max(fused.values(), default=1)
+        reranked = []
+        for chunk_id, fused_score in fused.items():
+            lexical_score = lexical_scores.get(chunk_id, 0) / max_lexical_score
+            rrf_score = fused_score / max_fused_score
+            if semantic_scores:
+                score = 0.6 * semantic_scores.get(chunk_id, 0) + 0.25 * lexical_score + 0.15 * rrf_score
+            else:
+                score = 0.75 * lexical_score + 0.25 * rrf_score
+            reranked.append((chunk_id, score))
+        reranked.sort(key=lambda item: item[1], reverse=True)
+        if reranked:
+            # Avoid exposing weak tail candidates just because a small corpus has
+            # fewer than the requested number of chunks.
+            threshold = max(0.18, reranked[0][1] * 0.55)
+            reranked = [item for item in reranked if item[1] >= threshold]
+        selected: list[tuple[UUID, float]] = []
+        per_document_count: dict[UUID, int] = defaultdict(int)
+        for chunk_id, score in reranked:
+            document_id = by_id[chunk_id][1].id
+            if per_document_count[document_id] >= 2:
+                continue
+            selected.append((chunk_id, score))
+            per_document_count[document_id] += 1
+            if len(selected) >= top_k:
+                break
         results = [
             KnowledgeSearchResult(
                 document_id=by_id[chunk_id][1].id,
@@ -321,12 +351,12 @@ class KnowledgeService:
                 source_name=by_id[chunk_id][1].name,
                 score=score,
             )
-            for chunk_id, score in sorted(fused.items(), key=lambda item: item[1], reverse=True)[:top_k]
+            for chunk_id, score in selected
         ]
         retrieval_config: dict[str, str | bool] = {
             "lexical_retriever": "postgres_fts+char_ngram" if fts_ranked else "char_ngram_fallback",
             "vector_retriever": bool(settings.embedding_base_url and settings.embedding_api_key),
-            "fusion": "rrf",
+            "fusion": "rrf+hybrid_rerank",
         }
         latency_ms = round((time.perf_counter() - started_at) * 1000)
         return results, retrieval_config, latency_ms

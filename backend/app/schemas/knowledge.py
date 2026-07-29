@@ -24,7 +24,7 @@ class KnowledgeDocumentRead(BaseModel):
 class KnowledgeSearchRequest(BaseModel):
     query: str = Field(min_length=1, max_length=2000)
     scope: list[KnowledgeSourceType] = Field(default_factory=lambda: ["project_docs", "knowledge_base"])
-    top_k: int = Field(default=8, ge=1, le=20)
+    top_k: int = Field(default=3, ge=1, le=10)
 
 
 class KnowledgeSearchResult(BaseModel):
