@@ -315,6 +315,9 @@ class KnowledgeService:
             by_id.update({chunk.id: (chunk, document) for chunk, document, _ in vector_ranked})
             semantic_scores = {chunk.id: max(0.0, 1 - distance) for chunk, _, distance in vector_ranked}
         fused = rrf_fuse(rankings)
+        feedback_signals = await self.repo.feedback_signals_for_chunks(
+            session, user_id, list(fused)
+        )
         max_lexical_score = max(lexical_scores.values(), default=1)
         max_fused_score = max(fused.values(), default=1)
         reranked = []
@@ -325,6 +328,7 @@ class KnowledgeService:
                 score = 0.6 * semantic_scores.get(chunk_id, 0) + 0.25 * lexical_score + 0.15 * rrf_score
             else:
                 score = 0.75 * lexical_score + 0.25 * rrf_score
+            score = max(0.0, min(1.0, score + 0.1 * feedback_signals.get(chunk_id, 0)))
             reranked.append((chunk_id, score))
         reranked.sort(key=lambda item: item[1], reverse=True)
         if reranked:
@@ -357,6 +361,7 @@ class KnowledgeService:
             "lexical_retriever": "postgres_fts+char_ngram" if fts_ranked else "char_ngram_fallback",
             "vector_retriever": bool(settings.embedding_base_url and settings.embedding_api_key),
             "fusion": "rrf+hybrid_rerank",
+            "feedback_personalization": bool(feedback_signals),
         }
         latency_ms = round((time.perf_counter() - started_at) * 1000)
         return results, retrieval_config, latency_ms

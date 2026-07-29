@@ -88,6 +88,9 @@ async def test_retrieval_quality_aggregates_feedback_and_latency(tmp_path: Path)
             if item.result_count == 2
         )
         await KnowledgeService().record_feedback(session, user.id, event.id, first_chunk, "helpful")
+        signals = await KnowledgeService().repo.feedback_signals_for_chunks(
+            session, user.id, [first_chunk, second_chunk]
+        )
         quality = await KnowledgeService().quality_overview(session, user.id)
 
         assert quality.search_count == 2
@@ -95,4 +98,6 @@ async def test_retrieval_quality_aggregates_feedback_and_latency(tmp_path: Path)
         assert quality.average_latency_ms == pytest.approx(100)
         assert quality.feedback_coverage_rate == pytest.approx(0.5)
         assert quality.helpful_rate == 1
+        assert signals[first_chunk] == pytest.approx(1 / 3)
+        assert second_chunk not in signals
     await engine.dispose()

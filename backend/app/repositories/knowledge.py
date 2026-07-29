@@ -1,5 +1,7 @@
 from uuid import UUID
 
+from collections import defaultdict
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -67,6 +69,27 @@ class KnowledgeRepository:
             select(KnowledgeSearchFeedback).where(KnowledgeSearchFeedback.user_id == user_id)
         )
         return list(result)
+
+    async def feedback_signals_for_chunks(
+        self, session: AsyncSession, user_id: UUID, chunk_ids: list[UUID]
+    ) -> dict[UUID, float]:
+        if not chunk_ids:
+            return {}
+        feedback = await session.scalars(
+            select(KnowledgeSearchFeedback).where(
+                KnowledgeSearchFeedback.user_id == user_id,
+                KnowledgeSearchFeedback.chunk_id.in_(chunk_ids),
+            )
+        )
+        votes: dict[UUID, list[int]] = defaultdict(list)
+        for item in feedback:
+            votes[item.chunk_id].append(1 if item.relevance == "helpful" else -1)
+        # Confidence grows slowly, preventing one accidental click from
+        # overpowering semantic relevance.
+        return {
+            chunk_id: (sum(values) / len(values)) * min(len(values) / 3, 1)
+            for chunk_id, values in votes.items()
+        }
 
     async def create_document(self, session: AsyncSession, document: KnowledgeDocument) -> KnowledgeDocument:
         session.add(document)
