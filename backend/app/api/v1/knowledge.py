@@ -12,6 +12,8 @@ from app.repositories.knowledge import KnowledgeRepository
 from app.schemas.knowledge import (
     KnowledgeCitationFeedbackCreate,
     KnowledgeDocumentRead,
+    BulkReindexRead,
+    EmbeddingStatusRead,
     KnowledgeRetrievalQualityRead,
     KnowledgeSearchRequest,
     KnowledgeSearchResponse,
@@ -72,6 +74,22 @@ async def reindex_document(
 ) -> KnowledgeDocumentRead:
     document = await service.reindex(session, user_id, document_id)
     return KnowledgeDocumentRead.model_validate(document)
+
+
+@router.get("/embedding-status", response_model=EmbeddingStatusRead)
+async def embedding_status(
+    user_id: UUID = Depends(current_user_id),
+    session: AsyncSession = Depends(get_db_session),
+) -> EmbeddingStatusRead:
+    return await service.embedding_status(session, user_id)
+
+
+@router.post("/documents/reindex-all", response_model=BulkReindexRead)
+async def reindex_all_documents(
+    user_id: UUID = Depends(current_user_id),
+    session: AsyncSession = Depends(get_db_session),
+) -> BulkReindexRead:
+    return await service.reindex_all(session, user_id)
 
 
 @router.post("/search", response_model=KnowledgeSearchResponse)

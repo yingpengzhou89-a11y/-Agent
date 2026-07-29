@@ -196,6 +196,19 @@ stateDiagram-v2
 
 面试流程会在首题、追问和单题评价时按题目、技能标签与当前回答检索项目资料；命中的片段作为 `source_refs` 持久化到题目，并同时注入 Agent 上下文和审计日志。检索异常或资料为空时自动降级为空上下文，不阻断面试状态机。
 
+### 启用语义检索
+
+默认的 FTS 与字符 n-gram 能处理关键词、删词和语序调整；要支持同义改写，需要在根目录 `.env` 配置一个兼容 OpenAI Embeddings API 的服务：
+
+```dotenv
+EMBEDDING_BASE_URL=https://<provider>/v1
+EMBEDDING_API_KEY=<your-key>
+EMBEDDING_MODEL=<embedding-model>
+EMBEDDING_DIMENSIONS=1024
+```
+
+模型输出维度必须与 `EMBEDDING_DIMENSIONS` 一致。重启后端后，到“项目知识库”确认状态为已配置，并点击“重建全部向量索引”；系统会对已有资料逐篇建立向量，失败的文档保留关键词检索能力并返回失败明细。
+
 ## 目录
 
 ```text

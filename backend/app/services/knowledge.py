@@ -18,7 +18,12 @@ from app.models.knowledge import (
     KnowledgeSearchFeedback,
 )
 from app.repositories.knowledge import KnowledgeRepository
-from app.schemas.knowledge import KnowledgeRetrievalQualityRead, KnowledgeSearchResult
+from app.schemas.knowledge import (
+    BulkReindexRead,
+    EmbeddingStatusRead,
+    KnowledgeRetrievalQualityRead,
+    KnowledgeSearchResult,
+)
 
 
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".md", ".txt"}
@@ -169,6 +174,38 @@ class KnowledgeService:
         document.index_status = "INDEXED"
         await session.flush()
         return document
+
+    async def embedding_status(self, session: AsyncSession, user_id: UUID) -> EmbeddingStatusRead:
+        documents = await self.repo.list_documents(session, user_id)
+        indexed = sum(document.index_status == "INDEXED" for document in documents)
+        return EmbeddingStatusRead(
+            configured=bool(settings.embedding_base_url and settings.embedding_api_key),
+            model=settings.embedding_model,
+            dimensions=settings.embedding_dimensions,
+            indexed_document_count=indexed,
+            pending_document_count=len(documents) - indexed,
+        )
+
+    async def reindex_all(self, session: AsyncSession, user_id: UUID) -> BulkReindexRead:
+        if not settings.embedding_base_url or not settings.embedding_api_key:
+            raise AppError("EMBEDDING_NOT_CONFIGURED", "请先配置 Embedding 服务", status_code=409)
+        documents = await self.repo.list_documents(session, user_id)
+        failures: list[dict[str, str]] = []
+        indexed_count = 0
+        for document in documents:
+            try:
+                await self.reindex(session, user_id, document.id)
+                indexed_count += 1
+            except AppError as exc:
+                document.index_status = "KEYWORD_READY"
+                failures.append({"document_id": str(document.id), "name": document.name, "reason": exc.message})
+        await session.flush()
+        return BulkReindexRead(
+            total_document_count=len(documents),
+            indexed_document_count=indexed_count,
+            failed_document_count=len(failures),
+            failures=failures,
+        )
 
     async def search_with_trace(
         self, session: AsyncSession, user_id: UUID, query: str, scope: list[str], top_k: int

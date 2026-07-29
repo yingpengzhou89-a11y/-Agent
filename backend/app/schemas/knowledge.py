@@ -54,3 +54,18 @@ class KnowledgeRetrievalQualityRead(BaseModel):
     feedback_count: int
     feedback_coverage_rate: float = Field(ge=0, le=1)
     helpful_rate: float | None = Field(default=None, ge=0, le=1)
+
+
+class EmbeddingStatusRead(BaseModel):
+    configured: bool
+    model: str
+    dimensions: int
+    indexed_document_count: int
+    pending_document_count: int
+
+
+class BulkReindexRead(BaseModel):
+    total_document_count: int
+    indexed_document_count: int
+    failed_document_count: int
+    failures: list[dict[str, str]] = []
