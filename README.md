@@ -28,17 +28,21 @@ PostgreSQL + pgvector ◀── 业务数据、向量检索、Agent 决策审计
 
 ### 推荐：一键开发模式（Windows）
 
-确保 Docker Desktop 已启动后，只需在项目根目录运行：
+确保 Docker Desktop 已启动后，直接双击项目根目录的 `start.cmd` 即可。它会自动绕过 PowerShell 的本地脚本执行限制、启动数据库、执行迁移，并开启前后端。
+
+如果在终端中启动，也只需运行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\start-dev.ps1
+.\start.cmd
 ```
 
-脚本会启动 PostgreSQL、等待数据库就绪、执行迁移，并以热更新模式启动后端（18000）和前端（5173）。不需要手动激活 Conda 环境。日志写入被 Git 忽略的 `logs/`；停止全部本地服务可运行：
+不需要手动激活 Conda 环境。日志写入被 Git 忽略的 `logs/`；停止全部本地服务时双击 `stop.cmd`，或运行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\stop-dev.ps1
+.\stop.cmd
 ```
+
+可选参数仍可透传给底层脚本，例如 `.\start.cmd -NoBrowser` 可以启动服务但不自动打开浏览器。
 
 ### 手动开发模式
 
