@@ -1,12 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
-
-
-class UserCreate(BaseModel):
-    display_name: str = Field(default="Local User", min_length=1, max_length=120)
-    email: str | None = Field(default=None, max_length=320)
+from pydantic import BaseModel, ConfigDict
 
 
 class UserRead(BaseModel):
@@ -16,4 +11,3 @@ class UserRead(BaseModel):
     email: str | None
     display_name: str
     created_at: datetime
-

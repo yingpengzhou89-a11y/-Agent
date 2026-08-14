@@ -73,16 +73,16 @@
 
 ```mermaid
 flowchart LR
-    U[用户浏览器] --> FE[React / Vite\nApp.tsx]
+    U[用户浏览器] --> FE["React / Vite<br/>App.tsx"]
     FE -->|REST + X-User-ID| API[FastAPI 路由]
-    API --> SVC[Services\n业务守卫、编排、降级]
+    API --> SVC["Services<br/>业务守卫、编排、降级"]
     SVC --> AG[InterviewAgent / EvaluationAgent]
-    AG --> GW[OpenAICompatibleGateway\nPydantic JSON 校验]
+    AG --> GW["OpenAICompatibleGateway<br/>Pydantic JSON 校验"]
     GW --> LLM[DeepSeek 等 OpenAI-compatible API]
     SVC --> REPO[Repositories / SQLAlchemy Async]
     REPO --> DB[(PostgreSQL + pgvector)]
     SVC --> FS[本地 data/uploads]
-    SVC --> RAG[KnowledgeService\nFTS + n-gram + vector + RRF]
+    SVC --> RAG["KnowledgeService<br/>FTS + n-gram + vector + RRF"]
     RAG --> DB
 ```
 
